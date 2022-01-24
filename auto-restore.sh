@@ -1,5 +1,7 @@
 #/bin/bash
 
+# Setup the source and destination here
+SOURCE_CLUSTER_NAME='Demo'
 TARGET_PROJECT_ID='5b75e82ec0c6e34530147939'
 TARGET_CLUSTER_NAME='QA'
 
@@ -15,20 +17,22 @@ strip_quotes (){
 status=''
 while [[ "${status}" != "completed" ]]
 do
-  status=$(mongocli atlas backups snapshots list Demo -o json | jq '.results[0].status')
+  status=$(mongocli atlas backups snapshots list "${SOURCE_CLUSTER_NAME}" -o json | jq '.results[0].status')
   status="${status%\"*}"
   status="${status#*\"}"
-  echo "status: ${status}"
+  echo "Waiting on backup to complete. status: ${status}"
+  sleep 10
 done
 
 # get last snapshot ID
-snapshotId=$(mongocli atlas backups snapshots list Demo -o json | jq '.results[0].id')
+snapshotId=$(mongocli atlas backups snapshots list "${SOURCE_CLUSTER_NAME}" -o json | jq '.results[0].id')
 snapshotId=$(strip_quotes "$snapshotId")
 
 # Restore snapshot to TARGET_PROJECT_ID / TARGET_CLUSTER_NAME
 echo "Starting restore... (snapshotId: ${snapshotId})"
 
-mongocli atlas backups restores start automated --clusterName Demo --output json --snapshotId "${snapshotId}" --targetClusterName "${TARGET_CLUSTER_NAME}" --targetProjectId "${TARGET_PROJECT_ID}" > /dev/null 2>&1
+# Start the restore job
+mongocli atlas backups restores start automated --clusterName "${SOURCE_CLUSTER_NAME}" --output json --snapshotId "${snapshotId}" --targetClusterName "${TARGET_CLUSTER_NAME}" --targetProjectId "${TARGET_PROJECT_ID}" > /dev/null 2>&1
 
 # Wait for restore to finish
 finishedAt='null'
@@ -38,7 +42,7 @@ do
   echo "Waiting for completion (${count})..."
   let count=${count}+1
   sleep 10
-  finishedAt=$(mongocli atlas backups restores list Demo --output json | jq '.results[0].finishedAt')
+  finishedAt=$(mongocli atlas backups restores list "${SOURCE_CLUSTER_NAME}" --output json | jq '.results[0].finishedAt')
 done
 
 echo "Done."
